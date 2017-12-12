@@ -1,8 +1,9 @@
 #r "packages/Hedgehog/lib/net452/Hedgehog.dll" 
+#load "precomputedPrimes.fsx"
 
 open System
 
-exception ExceptionNotANumber
+exception NotANumberException
 
 let digits (numStr: string): int[] =
     let parsesOk, num = Int64.TryParse numStr    
@@ -13,7 +14,7 @@ let digits (numStr: string): int[] =
         seq posString |> Seq.map (fun c -> int(c.ToString())) |> Seq.toArray
     else
         // Array.empty
-        raise ExceptionNotANumber
+        raise NotANumberException // or use a Result<int, ErrorType> type in a proper program
     
 /// Visual divisibility tests as done by eye and from a string input and not by a computer in base 10 decimal
 module IntegerDivisibilityTests =
@@ -55,7 +56,7 @@ module IntegerDivisibilityTests =
     let divBy6 (n: string): bool = 
         divBy2 n && divBy3 n
 
-    // 7 lacks an a consistent quick visual way to calculate divisibility if >= 1000
+    // 7 lacks a consistent quick visual way to calculate divisibility if >= 1000
     
     let divBy8 (n: string): bool = 
         let x = int(n)
@@ -113,3 +114,99 @@ module DivisibilityTestProperties =
     Property.print' runs check9
     Property.print' runs check10
     Property.print' runs check12    
+
+module Factors = 
+
+    let factors (n: int32): int list = 
+        let posNum = Math.Abs(n)
+        let rec buildFactors (next: int) (sentinel: int) (factors: int list): int list = 
+            if next >= sentinel then 
+                factors |> List.sort
+            else
+                let nextIsFactor = posNum % next = 0
+                if nextIsFactor then
+                    let factorPairHighPart = posNum / next
+                    let newFactors = 
+                        // Avoid duplicates when we've reached the last factor pair
+                        // e.g. (2, 2) is the last factor pair of 4
+                        if factorPairHighPart <> next then  
+                            (next :: factorPairHighPart :: factors)
+                        else 
+                            (next :: factors)
+                    buildFactors (next + 1) factorPairHighPart newFactors
+                else
+                    buildFactors (next + 1) sentinel factors
+
+        match posNum with 
+        | 0 -> [0]
+        | 1 -> [1]
+        | _ -> buildFactors 1 posNum []
+
+    let isComposite (n: int32): bool = 
+        let factorsOf = factors n
+        factorsOf.Length > 2  // more than 1 factor pair
+
+    let isPrimeViaCompositesCheck (n: int32): bool = 
+        // primes have exactly two factors. 1 is the factor of 1
+        n > 1 && not (isComposite n)
+
+    let isPrimeViaTrialDivision (n: int32): bool = 
+        let testPosNum = Math.Abs(n)        
+        // If it's a composite number then how large could the smallest divisor be?
+        // composites (through prime factorisation) can be built out of some number of prime multiplications
+        // e.g.  2 * 2 * 3 = 12. The largest prime that could be used in a multiplication is sqrt(n)
+        // This primatlity test requires the prime numbers from 2 to sqrt(n), which is a somewhat odd given that
+        // we are testing for primality and in theory do not know what the primes are.
+        // There are 6542 pre-computed primes up to 2^16, which is ~25KB as a 32bit int or ~12KB as a short.
+        // So this test is basically pointless for the pre-computed values up to 65K and allows calculating 
+        // primes < 2^32 easily enough. 
+        let trialDivision = (fun _ ->  
+            assert (testPosNum > 4) 
+            let highestPrimeCheck = int(Math.Sqrt(float testPosNum)) + 1
+            PrecomputedPrimes.primes 
+            |> Seq.ofArray
+            |> Seq.map int
+            |> Seq.takeWhile (fun p -> p <= highestPrimeCheck)
+            |> Seq.forall (fun p -> testPosNum % p <> 0)
+        )
+        match testPosNum with
+        | 0 -> false 
+        | 1 -> false  // 1 is not prime (primes have 2 factors).
+        | 2 -> true
+        | 3 -> true
+        | x when x % 2 = 0 -> false // 4 and all greater even numbers 
+        | x -> trialDivision x  // 5+
+
+
+module FactorProperties = 
+    open Factors
+    open Hedgehog
+    let testRange = Range.linear -10000 10000
+    let checkFactors = property {
+        let! n = Gen.int testRange
+        let factorsOf = factors n |> set
+        let isFactorOf x = 
+            n % x = 0
+        return {1..n} |> Seq.forall (fun x -> (isFactorOf x) = factorsOf.Contains(x))
+    }
+    Property.print' 5000<tests> checkFactors
+
+    let checkNumbersAboveTwoDifferInPrimeVsCompositeTest = property {
+        let! n = Gen.int testRange
+        let compositeIsNotPrime = (isComposite n) <> (isPrimeViaTrialDivision n)
+        // 0 and 1 are not prime *and* not composite, otherwise every number should be differ 
+        // in prime or composite predicates
+        // we are treating negative numbers as complements of the positives
+        return n = -1 || n = 0 || n = 1 || compositeIsNotPrime
+    }
+    Property.print' 5000<tests> checkNumbersAboveTwoDifferInPrimeVsCompositeTest
+
+    let checkPrimalityAgainstPrecomputed = property {
+        let! n = Gen.int (Range.constant 0 65536)
+        let isPrimeOracle = Array.BinarySearch(PrecomputedPrimes.primes, uint16(n)) >= 0
+        let isPrimeTrialDivision = isPrimeViaTrialDivision n
+        return isPrimeOracle = isPrimeTrialDivision
+    }
+    Property.print' 5000<tests> checkPrimalityAgainstPrecomputed
+
+
