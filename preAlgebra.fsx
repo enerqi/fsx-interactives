@@ -2,6 +2,7 @@
 #load "precomputedPrimes.fsx"
 
 open System
+open System.Collections
 
 exception NotANumberException
 
@@ -117,11 +118,11 @@ module DivisibilityTestProperties =
 
 module Factors = 
 
-    let factors (n: int32): int list = 
+    let factors (n: int32): int [] = 
         let posNum = Math.Abs(n)
-        let rec buildFactors (next: int) (sentinel: int) (factors: int list): int list = 
+        let rec buildFactors (next: int) (sentinel: int) (factors: int list): int [] = 
             if next >= sentinel then 
-                factors |> List.sort
+                factors |> Array.ofList |> Array.sort
             else
                 let nextIsFactor = posNum % next = 0
                 if nextIsFactor then
@@ -138,8 +139,8 @@ module Factors =
                     buildFactors (next + 1) sentinel factors
 
         match posNum with 
-        | 0 -> [0]
-        | 1 -> [1]
+        | 0 -> [|0|]
+        | 1 -> [|1|]
         | _ -> buildFactors 1 posNum []
 
     let isComposite (n: int32): bool = 
@@ -151,7 +152,23 @@ module Factors =
         n > 1 && not (isComposite n)
 
     let isPrimeViaTrialDivision (n: int32): bool = 
-        let testPosNum = Math.Abs(n)        
+        let testPosNum = Math.Abs(n)                
+        let trialDivision = (fun _ ->  
+            assert (testPosNum > 4) 
+            let highestPrimeCheck = int(Math.Sqrt(float testPosNum)) + 1
+            seq { 5 .. highestPrimeCheck } 
+            |> Seq.tryFind (fun i -> testPosNum % i = 0) 
+            |> Option.isNone            
+        )
+        match testPosNum with
+        | 0 -> false 
+        | 1 -> false  // 1 is not prime (primes have 2 factors).
+        | 2 -> true
+        | 3 -> true
+        | x when x % 2 = 0 -> false // 4 and all greater even numbers 
+        | x -> trialDivision  // 5+
+
+    let isPrimeViaPrimeFactorisationTest (n: int32): bool = 
         // If it's a composite number then how large could the smallest divisor be?
         // composites (through prime factorisation) can be built out of some number of prime multiplications
         // e.g.  2 * 2 * 3 = 12. The largest prime that could be used in a multiplication is sqrt(n)
@@ -160,8 +177,8 @@ module Factors =
         // There are 6542 pre-computed primes up to 2^16, which is ~25KB as a 32bit int or ~12KB as a short.
         // So this test is basically pointless for the pre-computed values up to 65K and allows calculating 
         // primes < 2^32 easily enough. 
-        let trialDivision = (fun _ ->  
-            assert (testPosNum > 4) 
+        let testPosNum = Math.Abs(n)
+        let isFactoredByPrime = (fun _ -> 
             let highestPrimeCheck = int(Math.Sqrt(float testPosNum)) + 1
             PrecomputedPrimes.primes 
             |> Seq.ofArray
@@ -169,14 +186,44 @@ module Factors =
             |> Seq.takeWhile (fun p -> p <= highestPrimeCheck)
             |> Seq.forall (fun p -> testPosNum % p <> 0)
         )
-        match testPosNum with
-        | 0 -> false 
-        | 1 -> false  // 1 is not prime (primes have 2 factors).
+        match testPosNum with 
+        | 0 -> false
+        | 1 -> false
         | 2 -> true
         | 3 -> true
-        | x when x % 2 = 0 -> false // 4 and all greater even numbers 
-        | x -> trialDivision x  // 5+
+        | x when x % 2 = 0 -> false
+        | x -> isFactoredByPrime x
 
+    // sieve of eratosthenes - generate all primes < N 
+    // note recalculating the primes with sieve each time for use with trial division using prime factors is
+    // slower than just trial division testing all numbers from 2 ... sqrt(n)
+    type Sieve(size: int) = 
+        let markedComposites = new BitArray(size)
+        member this.IsComposite(n: int) : bool = markedComposites.Get(n)
+        member this.MarkAsComposite(n: int) = markedComposites.Set(n, true)
+
+    let sieveEratosthenes (n: int32): int [] = 
+        let testPosNum = Math.Abs(n)
+        let highestPrimeCheck = int(Math.Sqrt(float testPosNum)) + 1
+        let sieve = Sieve(testPosNum)
+        seq { 2 .. highestPrimeCheck }
+        |> Seq.iter (fun i ->
+            if not (sieve.IsComposite(i)) then 
+                // i is prime and remains unmarked
+                // all larger multiples of i up to n are marked as composities
+                for multiple in (i * 2) .. i .. (n - 1) do
+                    sieve.MarkAsComposite(multiple)                
+        )
+        seq { 2 .. (n - 1) }
+        |> Seq.filter (fun i -> not (sieve.IsComposite(i)))
+        |> Seq.toArray
+
+    // The density of primes #Primes/n up to some number n is approx 1/ln(x) with the difference approaching zero
+    // as n gets larger, e.g. up to 100,000,000,000,000 it is ~0.1% off.
+    // So the expected number of primes up to n is size * density === x/ln(x)
+    let estimatedPrimesCountUpTo (n: int64): int64 = 
+        let f = float n
+        f / Math.Log(f) |> int64
 
 module FactorProperties = 
     open Factors
@@ -191,7 +238,7 @@ module FactorProperties =
     }
     Property.print' 5000<tests> checkFactors
 
-    let checkNumbersAboveTwoDifferInPrimeVsCompositeTest = property {
+    let checkTrialDivisionAgainstComposites = property {
         let! n = Gen.int testRange
         let compositeIsNotPrime = (isComposite n) <> (isPrimeViaTrialDivision n)
         // 0 and 1 are not prime *and* not composite, otherwise every number should be differ 
@@ -201,12 +248,31 @@ module FactorProperties =
     }
     Property.print' 5000<tests> checkNumbersAboveTwoDifferInPrimeVsCompositeTest
 
-    let checkPrimalityAgainstPrecomputed = property {
-        let! n = Gen.int (Range.constant 0 65536)
+    let checkTrialDivisonPrimalityAgainstPrecomputed = property {
+        let! n = Gen.int (Range.constant 0 65535)
         let isPrimeOracle = Array.BinarySearch(PrecomputedPrimes.primes, uint16(n)) >= 0
-        let isPrimeTrialDivision = isPrimeViaTrialDivision n
-        return isPrimeOracle = isPrimeTrialDivision
+        let isPrime = isPrimeViaTrialDivision n
+        return isPrimeOracle = isPrime
     }
     Property.print' 5000<tests> checkPrimalityAgainstPrecomputed
 
+    let checkPrimeFactorisationAgainstComposites = property {
+        let! n = Gen.int testRange
+        let compositeIsNotPrime = (isComposite n) <> (isPrimeViaPrimeFactorisationTest n)
+        return n = -1 || n = 0 || n = 1 || compositeIsNotPrime        
+    }
+    Property.print' 5000<tests> checkPrimeFactorisationAgainstComposites
 
+    let checkFactorisationPrimalityAgainstPrecomputed = property {
+        let! n = Gen.int (Range.constant 0 65535)
+        let isPrimeOracle = Array.BinarySearch(PrecomputedPrimes.primes, uint16(n)) >= 0
+        let isPrime = isPrimeViaPrimeFactorisationTest n
+        return isPrimeOracle = isPrime
+    }
+    Property.print' 5000<tests> checkFactorisationPrimalityAgainstPrecomputed
+
+    let testSieveMatchesPrecomputedOracle = 
+        let sievePrimes = sieveEratosthenes 65536
+        let sievePrimes16bit = Array.map (fun i -> uint16(i)) sievePrimes
+        sievePrimes16bit = PrecomputedPrimes.primes
+    assert testSieveMatchesPrecomputedOracle
