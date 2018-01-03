@@ -225,6 +225,21 @@ module Factors =
         let f = float n
         f / Math.Log(f) |> int64
 
+    // Least (smallest) common multiple of 2 numbers  - multiples of the given numbers only 
+
+    // Greatest common factor - greatest of any number(s) that divide into the given 2 numbers
+    // Greatest common divisor (a.k.a)
+    let euclid_gcd (m: int) (n: int) : int = 
+        let mutable a = Math.Abs(m)
+        let mutable b = Math.Abs(n)
+        while a <> 0 do 
+            if a < b then
+                let t = a
+                a <- b
+                b <- t
+            a <- a % b     
+        b
+
 module FactorProperties = 
     open Factors
     open Hedgehog
