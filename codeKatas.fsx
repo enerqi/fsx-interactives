@@ -112,3 +112,21 @@ module SimpleEncryptionAlternatingSplitKata =
 
     let decrypt (encryptedText: string) (n: int): string =
         processTextWith decryptOnce encryptedText n
+
+[<AutoOpen>]
+module StringRepeatKata =
+    open System
+    let repeatStr (n: int) (s: string): string =
+        s
+        |> Seq.replicate n
+        |> String.Concat
+
+/// You get the start number and the end number of a region and should return the count of all numbers
+/// except numbers with a 5 in it. The start and the end number are both inclusive!
+/// -5, 15, 25, 35, 45, 50, 55, 500, 5000 etc.
+[<AutoOpen>]
+module DontGiveMeFiveKata =
+    let dontGiveMeFive (startValue: int) (endValue: int): int =
+        let has5 n = string(n).Contains("5")  // the easy non-maths solution
+        seq { startValue..endValue }
+        |> Seq.sumBy (fun i -> if has5 i then 0 else 1)
