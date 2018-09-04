@@ -1,10 +1,9 @@
-open System
-
 /// Input: list of single digit integers. De-duplicate them, order them, then join the digits
 /// into an integer value by combining the digits.
 /// E.g. FormMin [3; 2; 1; 1; 2; 3] === 123
 [<AutoOpen>]
 module FormMinKata =
+    open System
     [<Struct>]
     type private DigitConcatState = {
         PlaceValueIndex: int
@@ -43,23 +42,73 @@ module FormMinKata =
 /// If n is <= 0 then return the input text.
 [<AutoOpen>]
 module SimpleEncryptionAlternatingSplitKata =
+    open System
 
-    let private encryptOnce (text: string): string =
-        let textChars = Array.ofSeq text
-        let indexedChars = Array.indexed textChars
-        let everySecondChar, everyOtherChar = Array.partition (fun (index, _) -> index % 2 = 0) indexedChars
-        String.Concat(string(everySecondChar), string(everyOtherChar))
+    let encryptOnce (text: string): string =
+        let indexedChars =
+            text
+            |> Seq.indexed
+            |> Array.ofSeq  // There is no Seq.partition so we need an array
+        let everyIndexedSecondChar, everyIndexedOtherChar =
+            indexedChars
+            |> Array.partition (fun (index, _) -> index % 2 = 1)
+        let extractCharSeq (indexedChars: (int * char) []): seq<char> =
+            indexedChars
+            |> Seq.ofArray
+            |> Seq.map (fun (_, char) -> char)
+
+        // `string` would just call ToString on the Seq i.e. "Microsoft.Fsharp seq ... summary"
+        let firstTextBlock = String.Concat(extractCharSeq everyIndexedSecondChar)
+        let secondTextBlock = String.Concat(extractCharSeq everyIndexedOtherChar)
+        String.Concat(firstTextBlock, secondTextBlock)
+
+    let decryptOnce (text: string): string =
+        // The other chars always get moved to the second half of the text string and
+        // start at this index
+        let splitIndex = text.Length / 2;
+        let everySecondChar, everyOtherChar =
+            text
+            |> Array.ofSeq
+            |> Array.splitAt splitIndex
+
+        // We'd like to zip the arrays, but Array.zip always requires them to be the same length
+        // Seq.zip allows different lengths but truncates the longer one
+        // The same length requirement is true of `Array.mapi2` aswell
+        // We can write a generic zip longest that puts default pad values in or just work from the
+        // knowledge that there is only at most one extra character and execute different code branches
+        let flatten (pairedChars: (char * char) []): seq<char> =
+            // Tuples cannot be flattened with concat as they are not enumerable! They are an infinite combination
+            // of types and don't have a clean length generic way to process them.
+            seq { for (a, b) in pairedChars do yield! [|a; b|]}
+
+        let flattenAndAppendExtra (extraChar: char) (pairedChars: (char * char) []): seq<char> =
+            seq {
+                for (a, b) in pairedChars do
+                    yield! [|a; b|]
+                yield extraChar
+            }
+
+        let decryptedChars =
+            if everySecondChar.Length = everyOtherChar.Length then
+                Array.zip everyOtherChar everySecondChar
+                |> flatten
+            else
+                let lastChar = everyOtherChar.[everyOtherChar.Length - 1]
+                let butLastEveryOtherChar = everyOtherChar.[0..everyOtherChar.Length - 2]
+                Array.zip butLastEveryOtherChar everySecondChar
+                |> flattenAndAppendExtra lastChar
+
+        String.Concat(decryptedChars)
+
+    let processTextWith (f: string -> string) (text: string) (nTimes: int): string =
+        if not (String.IsNullOrEmpty text || nTimes <= 0) then
+            seq { 1..nTimes }
+            |> Seq.fold (fun textBlock _ -> f textBlock) text
+        else
+            text
 
     let encrypt (text: string) (n: int): string =
-        if String.IsNullOrEmpty text || n <= 0 then
-            text
-        else
-            // Imperative solution
-            // let mutable encrypted = text
-            // for i = 1 to n do
-            //     encrypted <- encryptOnce(encrypted)
-            // encrypted
-            [|1..n|] |> Array.fold (fun textBlock _ -> encryptOnce textBlock) text
+        processTextWith encryptOnce text n
 
-    let decrypt (encryptedText: string) (n: int): string = ""
-
+    let decrypt (encryptedText: string) (n: int): string =
+        processTextWith decryptOnce encryptedText n
