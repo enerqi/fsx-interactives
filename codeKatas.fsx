@@ -130,3 +130,64 @@ module DontGiveMeFiveKata =
         let has5 n = string(n).Contains("5")  // the easy non-maths solution
         seq { startValue..endValue }
         |> Seq.sumBy (fun i -> if has5 i then 0 else 1)
+
+
+/// A child is playing with a ball on the nth floor of a tall building. The height of this floor, h, is known.
+/// He drops the ball out of the window. The ball bounces (for example), to two-thirds of its height (a bounce of 0.66).
+/// His mother looks out of a window 1.5 meters from the ground.
+/// How many times will the mother see the ball pass in front of her window (including when it's falling and bouncing?
+/// The ball can only be seen if the height of the rebounding ball is stricty greater than the window parameter.
+[<AutoOpen>]
+module BouncingBallsKata =
+    let rec private calcBounces (h: float) (bounce: float) (window: float): int =
+        // At the start of this function the ball is always at full height for the current drop/bounce
+        if h > window then
+            let reboundHeight = bounce * h
+            let windowPasses =
+                if reboundHeight > window then
+                    2
+                else
+                    1
+            windowPasses + calcBounces reboundHeight bounce window
+        else
+            0
+    let bouncingBall (h: float) (bounce: float) (window: float): int =
+        if h > 0.0 && bounce > 0.0 && bounce < 1.0 && window < h then
+            calcBounces h bounce window
+        else
+            -1
+
+
+[<AutoOpen>]
+module DisemvowelKata =
+    open System
+    let disemvowel (s: string): string =
+        let isNotVowel character =
+            let vowels = [|'a'; 'e'; 'i'; 'o'; 'u'; 'A'; 'E'; 'I'; 'O'; 'U'|]
+            not <| Array.contains character vowels
+
+        s
+        |> Array.ofSeq
+        |> Array.filter isNotVowel
+        |> String.Concat
+
+
+/// Take an integer n (n >= 0) and a digit d (0 <= d <= 9) as an integer. Square all numbers k (0 <= k <= n)
+/// between 0 and n. Count the numbers of digits d used in the writing of all the k**2.
+/// Call nb_dig (or nbDig or ...) the function taking n and d as parameters and returning this count.
+[<AutoOpen>]
+module CountDigitsKata =
+    let nbDig (n: int) (d:int): int =
+
+        let rec digitCount' (accumulator: int) (i: int): int =
+            let rightMostDigitMatches = (i % 10) = d
+            let isLastDigit = i < 10
+            match (isLastDigit, rightMostDigitMatches) with
+            | true, true -> 1 + accumulator
+            | true, false -> accumulator
+            | false, true -> digitCount' (1 + accumulator) (i / 10)
+            | false, false -> digitCount' accumulator (i / 10)
+
+        let digitCount k = digitCount' 0 k
+        let ks = seq { for i in 0 .. n -> i * i}
+        Seq.sumBy digitCount ks
