@@ -191,3 +191,63 @@ module CountDigitsKata =
         let digitCount k = digitCount' 0 k
         let ks = seq { for i in 0 .. n -> i * i}
         Seq.sumBy digitCount ks
+
+/// Basically like a Fibonacci, but summing the last 3 (instead of 2) numbers of the sequence to generate the next
+/// signature [1,1,1] then [1, 1 ,1, 3, 5, 9, 17, 31, ...]
+/// But what if we started with [0, 0, 1] as a signature?
+/// Given a signature array/list, returns the first n elements - signature included of the so seeded sequence.
+[<AutoOpen>]
+module TribonacciKata =
+    let tribonacci (signature: int list) (n: int): int list =
+
+        if n <= 3 then
+            signature |> List.take n
+        else
+            let startTriple =
+                match signature with
+                | [a; b; c] -> (a, b, c)
+                | _ -> failwith "signature should be a triple"
+
+            let nextTrib = function (a, b, c) -> Some(a + b + c, (b, c, a + b + c))
+
+            signature @ (startTriple |> Seq.unfold nextTrib |> Seq.take (n - 3) |> List.ofSeq)
+
+[<AutoOpen>]
+module TenMinuteWalk =
+    let isValidWalk (walk: char list): bool =
+
+        if List.length walk <> 10 then
+          false
+        else
+          let move (positionState: int * int) (direction: char): int * int =
+              let x, y = positionState
+              match direction with
+              | 'n' -> (x, y + 1)
+              | 's' -> (x, y - 1)
+              | 'e' -> (x + 1, y)
+              | 'w' -> (x - 1, y)
+              | _ -> failwith "illegal walk direction"
+
+          let startPosition = (0, 0)
+          let walkFinishPosition = walk |> List.fold move startPosition
+          walkFinishPosition = startPosition
+
+/// rgb values constrained to 0-255 then converted to an uppercase hexadecimal string
+[<AutoOpen>]
+module RGBToHex =
+    open System
+
+    let rgb (r: int) (g: int) (b: int): string =
+
+        let normalise = function
+            | n when n < 0 -> 0
+            | n when n > 255 -> 255
+            | n -> n
+
+        let hex (n: int): string =
+            sprintf "%02X" (normalise n)  // X=hex, 0 means zero pad, 2 padding length
+
+        (hex r) + (hex g) + (hex b)
+
+
+
