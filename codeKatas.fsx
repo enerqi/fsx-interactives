@@ -58,6 +58,7 @@ module SimpleEncryptionAlternatingSplitKata =
             |> Seq.map (fun (_, char) -> char)
 
         // `string` would just call ToString on the Seq i.e. "Microsoft.Fsharp seq ... summary"
+        // Todo: System.String would be just as good (distinguishing from the `String` module)
         let firstTextBlock = String.Concat(extractCharSeq everyIndexedSecondChar)
         let secondTextBlock = String.Concat(extractCharSeq everyIndexedOtherChar)
         String.Concat(firstTextBlock, secondTextBlock)
@@ -249,5 +250,95 @@ module RGBToHex =
 
         (hex r) + (hex g) + (hex b)
 
+// How many iterations of the Leibniz formula for PI does it take to
+// achieve a certain accuracy (the diff between our calculation and Math.PI is < epsilon)
+// π/4 ~= 1 - (1/3 + 1/5) - (1/7 + 1/9) - (1/11 + 1/13) -...
+[<AutoOpen>]
+module PIApproxKata =
+    open System
+    let iterPi (epsilon: double): int * double =
+
+        let PI: double = 3.14159265358979323846  // Math.PI is only a float
+        // *The fully imperative soluton*
+        //
+        // let mutable piApprox = 1.0
+        // let mutable iterationsCount = 1  // started with 1.0 already
+        // let mutable seriesSum = 1.0
+        // let mutable denominator = 1
+        // let mutable isAdditionOperation = false
+        // while Math.Abs(piApprox - PI) >= epsilon do
+        //     denominator <- denominator + 2
+        //     let next = 1.0 / double(denominator)
+        //     if isAdditionOperation then
+        //         seriesSum <- seriesSum + next
+        //     else
+        //         seriesSum <- seriesSum - next
+        //     isAdditionOperation <- not isAdditionOperation
+        //     iterationsCount <- iterationsCount + 1
+        //     piApprox <- seriesSum * 4.0
+        // (iterationsCount, piApprox)
+
+        let rec nextIteration iterations piApproximation seriesSum termDenominator isAddition =
+            if Math.Abs(piApproximation - PI) < epsilon then
+                (iterations, piApproximation)
+            else
+                let denominator = termDenominator + 2
+                let termValue = 1.0 / double(denominator)
+                let nextSeriesSum =
+                    if isAddition then
+                        seriesSum + termValue
+                    else
+                        seriesSum - termValue
+                let piApprox = nextSeriesSum * 4.0
+                nextIteration (iterations + 1) piApprox nextSeriesSum denominator (not isAddition)
+
+        let initialSeriesSum = 1.0  // counts as an iteration
+        let initialIterationsCount = 1
+        let initialDenominator = 1
+        let isAddition = false
+        nextIteration initialIterationsCount 0.0 initialSeriesSum initialDenominator isAddition
+
+    // Improvements? Though likely not more performant in any way:
+    // You don't have do collect all of a seq and turn it into a collection or display
+    // it all. Running find/tryFind/take n etc. can end it early
+    // Seq.initInfinite is useful as a general 'enumerate'
+    // Seq.unfold
+    // seq custom expression
+    // `sign * -1` is better than isAddition or a seq of alterning -1/d ... +1/d+n ...
 
 
+/// Given two arrays of strings a1 and a2 return a sorted array r in lexicographical order
+/// of the strings of a1 which are substrings of strings of a2.
+/// Beware: result must be without duplicates.
+[<AutoOpen>]
+module WhichAreInKata =
+    let inArray (a1: string list) (a2: string list) =
+
+        let contains (s1: string) (s2: string) =
+            s2.Contains(s1)
+
+        [for s in a1 do
+         if a2 |> List.exists (contains s) then yield s]
+        |> List.distinct
+        |> List.sort
+
+[<AutoOpen>]
+module LostSheepKata =
+    let lostSheep (fridaysCount:int array) (saturdaysCount:int array) (totalSheep:int) : int =
+        totalSheep - (Array.sum fridaysCount + Array.sum saturdaysCount)
+
+
+/// Write a function that receives two strings and returns n, where n is equal
+/// to the number of characters we should shift the first string forward to match
+/// the second.
+module CalcStringRotation =
+    open System
+
+    let rotateString (rotations: int) (s: string): string =
+        // ToCharArray then modifying in place and back to String is 2 copies so just use the substring functionality
+        ""
+
+    let ShiftedDiff (first : string) (second : string) =
+        // someString.substring is the easiest way to build a new string with a rotation
+        // Bentley programming perls in place no extra space version is faster
+        1
