@@ -329,16 +329,27 @@ module LostSheepKata =
 
 
 /// Write a function that receives two strings and returns n, where n is equal
-/// to the number of characters we should shift the first string forward to match
+/// to the number of characters we should shift the first string forward (right) to match
 /// the second.
+[<AutoOpen>]
 module CalcStringRotation =
     open System
 
-    let rotateString (rotations: int) (s: string): string =
-        // ToCharArray then modifying in place and back to String is 2 copies so just use the substring functionality
-        ""
+    let private rotateString (rightRotations: int) (s: string): string =
+        if s.Length < 2 || rightRotations = 0 then
+            s
+        else
+            // ToCharArray then modifying in place and back to String is 2 copies so just use the substring functionality
+            let shifts =
+                if rightRotations >= s.Length then
+                    rightRotations % s.Length
+                else
+                    rightRotations
+            let d = s.Length - shifts
+            s.Substring(d) + s.Substring(0, d)
 
-    let ShiftedDiff (first : string) (second : string) =
-        // someString.substring is the easiest way to build a new string with a rotation
-        // Bentley programming perls in place no extra space version is faster
-        1
+    let ShiftedDiff (first : string) (second : string): int =
+        seq { for i in 0..first.Length -> (i, rotateString i first) }
+        |> Seq.tryFind (fun (_, rotatedString) -> rotatedString = second)
+        |> Option.map (fun (rotationsCount, _) -> rotationsCount)
+        |> Option.defaultValue -1
